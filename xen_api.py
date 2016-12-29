@@ -3,10 +3,16 @@ from shutil import copyfile
 from glob import glob
 import os, errno
 import ConfigParser
-
+import logging
 
 config = ConfigParser.ConfigParser()
+
+# TODO change this to a common config file on a shared location
 config.read("/home/vlab/config.ini")
+
+# TODO change the logging level and file name to be read from config file
+logging.basicConfig(filename='/home/vlab/log/xen-api.log',
+                    level=logging.DEBUG, format='%(asctime)s-%(levelname)s:%(message)s')
 
 
 class XenAPI:
@@ -22,6 +28,7 @@ class XenAPI:
         starts specified virtual machine
         :param vm_name name of virtual machine
         """
+        logging.debug('Starting VM - {}'.format(vm_name))
         return VirtualMachine(vm_name).start()
 
     def stop_vm(self, vm_name):
@@ -29,13 +36,12 @@ class XenAPI:
         stops the specified vm
         :param vm_name: name of the vm to be stopped
         """
-        # TODO domain name screwed up  - 2_3_2 and 12_3_2 similar causes problems
-        # TODO find a better approach
         try:
+            logging.debug('Stopping VM - {}'.format(vm_name))
             vm = self.list_vm(vm_name)
-            # VirtualMachine(vm_name).shutdown(vm.id)
             vm.shutdown()
         except Exception:
+            logging.exception("Error while shutting down VM - {}".format(vm_name))
             pass
 
     def list_all_vms(self):
@@ -43,11 +49,12 @@ class XenAPI:
         lists all vms in the server (output of xl list)
         :return List of VirtualMachine with id, name, memory, vcpus, state, uptime
         """
+        logging.debug('Listing all VMs..')
         cmd = 'xl list'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
+            raise Exception('ERROR : cannot list all the vms. \n Reason : %s' % err.rstrip())
 
         vms = []
         output = out.strip().split("\n")
@@ -73,6 +80,7 @@ class XenAPI:
         :param vm_name name of virtual machine
         :return VirtualMachine with id, name, memory, vcpus, state, uptime
         """
+        logging.debug('Listing VM {}'.format(vm_name))
         cmd = 'xl list '+vm_name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -150,6 +158,7 @@ class VirtualMachine:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
+            logging.error(' Error while starting VM - {}'.format(cmd))
             raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
         else:
             return XenAPI().list_vm(self.name)
@@ -167,32 +176,31 @@ class VirtualMachine:
         if not p.returncode == 0:
             # silently ignore if vm is already destroyed
             if 'invalid domain identifier' not in err.rstrip():
+                logging.error(' Cannot find VM to be stopped - {}'.format(cmd))
                 raise Exception('ERROR : cannot stop the vm '
                                 '\n Reason : %s' % err.rstrip())
 
-        # TODO domain name screwed up  - 2_3_2 and x2_3_2 or similar causes problems
-        # TODO find a better approach
+        # this is an additional step to deal with old
+        # xen-traditional model. Can be removed later
         self.kill_zombie_vms(self.id)
 
-    # This is an additional step which probably could be removed when a native interface to xl is ready
-    # this is a work around to deal with zombie
-    def kill_zombie_vms(self, vm_id=-1):
-        if vm_id == -1:
-            cmd = 'ps -ef | grep qemu-dm | grep ' + self.name
-        else:
-            cmd = 'ps -ef | grep qemu-dm | grep "d ' + vm_id+'"'
+    #  This is an additional step to kill zombie VMs if the device model is set to
+    #  qemu-traditional in xl conf. SET model to qemu-xen
+    def kill_zombie_vms(self, vm_id):
 
+        cmd = 'ps -ef | grep qemu-dm | grep "d ' + vm_id+'"'
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            raise Exception('ERROR : cannot find zombie vms. \n Reason : %s' % err.rstrip())
+            logging.error(' Error while finding zombie VMs - {}'.format(cmd))
+            raise Exception('ERROR : trying to find zombie vms. \n Reason : %s' % err.rstrip())
 
         output = out.split("\n")
         if len(output) > 2:
             cnt = 0
 
             line = output[0]
-            # fix for when process id of grep is small than actual pid
+            # fix for when process id if grep is small than actual pid
             for out_line in output:
                 if cmd not in out_line:
                     line = output[cnt]
@@ -206,13 +214,8 @@ class VirtualMachine:
             out, err = p.communicate()
 
             if not p.returncode == 0:
-                # raise Exception('ERROR : cannot kill zombie vms.\n Reason : %s' % (err.rstrip()))
-                # send mail will not work coz module is not available
-                # send_mail('Error log - Vital',
-                #          'cmd: '+cmd+'\n Error:'+err.rstrip(),
-                #          'no-reply-vital@nyu.edu', ['rdj259@nyu.edu'], fail_silently=False)
+                logging.error('Cannot kill zombie vms.\n Reason : %s' % (err.rstrip()))
                 pass
-                # TODO this is to be fixed or a new solution found to fix this problem
 
 
     def setup(self, base_vm, vif):
@@ -225,6 +228,7 @@ class VirtualMachine:
             copyfile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
                      config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow')
         except Exception as e:
+            logging.error(' Error while creating new VM dsk - {}'.format(self.name))
             raise Exception('ERROR : cannot setup the vm - qcow '
                             '\n Reason : %s' % str(e).rstrip())
 
@@ -232,10 +236,10 @@ class VirtualMachine:
             copyfile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
                      config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
         except Exception as e:
+            logging.error(' Error while creating VM conf - {}'.format(self.name))
             raise Exception('ERROR : cannot setup the vm - conf '
                             '\n Reason : %s' % str(e).rstrip())
 
-        # TODO update conf file with required values
         f = open(config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf', 'r')
         file_data = f.read()
         f.close()
@@ -256,6 +260,7 @@ class VirtualMachine:
             for filename in glob(config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.*'):
                 os.remove(filename)
         except Exception as e:
+            logging.error(' Error while removing VM dsk - {}'.format(self.name))
             raise Exception('ERROR : cannot unregister the vm - qcow '
                             '\n Reason : %s' % str(e).rstrip())
 
@@ -263,6 +268,7 @@ class VirtualMachine:
             os.remove(config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
         except OSError as e:
             if e.errno != errno.ENOENT:
+                logging.error(' Error while removing VM conf - {}'.format(self.name))
                 raise Exception('ERROR : cannot unregister the vm - conf '
                                 '\n Reason : %s' % str(e).rstrip())
 
@@ -275,6 +281,7 @@ class VirtualMachine:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
+            logging.error(' Error while saving VM - {}'.format(cmd))
             raise Exception('ERROR : cannot create snapshot the vm \n Reason : %s' % err.rstrip())
 
     def restore(self, base_vm):
@@ -286,6 +293,7 @@ class VirtualMachine:
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
+                logging.error(' Error while restoring VM - {}'.format(cmd))
                 raise Exception('ERROR : cannot restore snapshot the vm \n Reason : %s' % err.rstrip())
         else:
             self.setup(base_vm)

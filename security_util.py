@@ -5,6 +5,8 @@ import ConfigParser
 
 
 config = ConfigParser.ConfigParser()
+
+# TODO change this to a common config file on a shared location
 config.read("/home/vlab/config.ini")
 
 
@@ -37,6 +39,7 @@ def is_exposed(func):
     return getattr(func, 'exposed', False)
 
 
+# TODO this method should call out to another Authenticator class to make this generic
 def is_authorized(func, user, passwd):
     """ Checks if user is valid and if user can  perform the action specified """
 
@@ -57,9 +60,6 @@ def is_authorized(func, user, passwd):
             raise Exception('access to method "%s" with credentials provided is restricted' % func)
 
         row = rows[0]
-        # validates username and password (uses Django utils to verify password)
-        # if not PBKDF2PasswordHasher().verify(passwd, row[0]):
-        #    raise Exception('access to method "%s" with credentials provided is restricted' % func)
         if not passwd == row[0]:
             raise Exception('access to method "%s" with credentials provided is restricted' % func)
 
