@@ -16,13 +16,18 @@ function add_bridge_if {
   brctl addif $brdg $bond
 }
 
-nets=$(psql -U postgres -d vital_db -t -c "SELECT c.id from vital_course c join vital_network_configuration n on c.id=n.course_id where c.status='ACTIVE'")
+# reading from config file
+host=$(awk -F ":" '/VITAL_DB_HOST/ {print $2}' /home/vlab/config.ini | tr -d ' ')
+pass=$(awk -F ":" '/VITAL_DB_PWD/ {print $2}' /home/vlab/config.ini | tr -d ' ')
+
+nets=$(PGPASSWORD=$pass psql -U postgres -d vital_db -h $host -t -c "SELECT c.id from vital_course c join vital_network_configuration n on c.id=n.course_id where c.status='ACTIVE'")
 set -f
 array=(${nets// / })
 
 for var in "${array[@]}"
 do
     create_bond $var
-    net_name=$(psql -U postgres -d vital_db -t -c "SELECT n.name from vital_network_configuration n where n.is_course_net=True and n.course_id="+$var)
-    add_bridge_if net_name "bond0."+$var
+    # set host and password for each server
+    net_name=$(PGPASSWORD=$pass psql -U postgres -d vital_db -h $host -t -c "SELECT n.name from vital_network_configuration n where n.is_course_net=True and n.course_id="+$var)
+    add_bridge_if $net_name bond0.$var
 done
