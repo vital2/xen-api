@@ -140,6 +140,36 @@ class XenAPI:
     def kill_zombie_vm(self, vm_id):
         VirtualMachine('zombie').kill_zombie_vms(vm_id)
 
+    def create_bridge(self, name):
+        cmd = 'brctl addbr '+name
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if not p.returncode == 0:
+            logging.error('Error while creating bridge - {}'.format(cmd))
+            raise Exception('ERROR : cannot create the bridge. \n Reason : %s' % err.rstrip())
+        else:
+            cmd = 'ifconfig ' + name + ' up'
+            p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            out, err = p.communicate()
+            if not p.returncode == 0:
+                logging.error('Error while starting bridge - {}'.format(cmd))
+                raise Exception('ERROR : cannot start the bridge. \n Reason : %s' % err.rstrip())
+
+    def remove_bridge(self, name):
+        cmd = 'ifconfig ' + name + ' down'
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if not p.returncode == 0:
+            logging.error('Error while stopping bridge - {}'.format(cmd))
+            raise Exception('ERROR : cannot stop the bridge. \n Reason : %s' % err.rstrip())
+        else:
+            cmd = 'brctl delbr ' + name
+            p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            out, err = p.communicate()
+            if not p.returncode == 0:
+                logging.error('Error while removing bridge - {}'.format(cmd))
+                raise Exception('ERROR : cannot remove the bridge. \n Reason : %s' % err.rstrip())
+
 
 class VirtualMachine:
     """
@@ -216,7 +246,6 @@ class VirtualMachine:
             if not p.returncode == 0:
                 logging.error('Cannot kill zombie vms.\n Reason : %s' % (err.rstrip()))
                 pass
-
 
     def setup(self, base_vm, vif):
         """

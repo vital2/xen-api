@@ -5,6 +5,9 @@ from xen_api import XenAPI
 import SocketServer
 
 
+# TODO Security to check if requesting user has privilege and callback security model
+# TODO or default security model
+
 class XenAPIExposer:
     """ This class exposes the actual xen_api with a remote RPC interface """
 
@@ -12,7 +15,7 @@ class XenAPIExposer:
         self.prefix = 'xenapi'
 
     def _dispatch(self, method, params):
-        """ This method receives all the calls to the xen_api. Perfo """
+        """ This method receives all the calls to the xen_api."""
 
         # check if method starts with correct prefix
         if not method.startswith(self.prefix + "."):
@@ -74,6 +77,16 @@ class XenAPIExposer:
     @requires_authentication_only
     def kill_zombie_vm(self, user, passwd, vm_id):
         XenAPI().kill_zombie_vm(vm_id)
+
+    @expose
+    @requires_authentication_only
+    def create_bridge(self, user, passwd, name):
+        XenAPI().create_bridge(name)
+
+    @expose
+    @requires_authentication_only
+    def remove_bridge(self, user, passwd, name):
+        XenAPI().remove_bridge(name)
 
 
 # allows RPC module to handle concurrent requests
