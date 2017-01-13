@@ -26,8 +26,10 @@ array=(${nets// / })
 
 for var in "${array[@]}"
 do
+    echo "Creating for $var"
     create_bond $var
     # set host and password for each server
     net_name=$(PGPASSWORD=$pass psql -U postgres -d vital_db -h $host -t -c "SELECT n.name from vital_network_configuration n where n.is_course_net=True and n.course_id="+$var)
+    echo "Creating bridge for $net_name"
     add_bridge_if $net_name bond0.$var
 done
