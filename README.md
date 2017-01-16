@@ -9,8 +9,4 @@ Functions supported
 
 3. Remove VMs
 
-ToDo
-
-1. Create Networks
-
-2. Xen server statistics
+4. Create bridges
