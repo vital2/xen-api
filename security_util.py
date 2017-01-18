@@ -1,6 +1,5 @@
 # Utility class which provides security decorators to xen_api_exposer
 import psycopg2
-from django.contrib.auth.hashers import PBKDF2PasswordHasher
 import ConfigParser
 
 
