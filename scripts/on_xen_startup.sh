@@ -1,6 +1,7 @@
 #!/bin/bash
 
-mount -t glusterfs 128.238.77.30:volume1 /mnt/vlab-datastore
+mount -t glusterfs gusterfs1-dev:volume1 /mnt/vlab-datastore
+# mount -t glusterfs Vlab-gluster1:/vlab /mnt/vlab-datastore
 xl sched-credit -d Domain-0 -w 2048
 
 #Disable Netfilter on Bridges (Xen xl usage)
