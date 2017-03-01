@@ -99,7 +99,7 @@ class XenAPIExposer:
 class SimpleThreadedXMLRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     pass
 
-server = SimpleThreadedXMLRPCServer((config.get("XenAPI", "IP_ADDRESS"), config.get("XenAPI", "PORT")), logRequests=True, allow_none=True)
+server = SimpleThreadedXMLRPCServer((config.get("XenAPI", "IP_ADDRESS"), int(config.get("XenAPI", "PORT"))), logRequests=True, allow_none=True)
 server.register_instance(XenAPIExposer())
 try:
     print 'Use Control-C to exit'
