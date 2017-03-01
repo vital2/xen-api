@@ -5,14 +5,20 @@ import os, errno
 import ConfigParser
 import logging
 
+from logging.handler import RotatingFileHandler
+
 config = ConfigParser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
 config.read("/home/vlab/config.ini")
 
 # TODO change the logging level and file name to be read from config file
-logging.basicConfig(filename='/home/vlab/log/xen-api.log',
-                    level=logging.DEBUG, format='%(asctime)s-%(levelname)s:%(message)s')
+logger = logging.getLogger('xen api')
+logger.setLevel(logging.DEBUG)
+handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024, backupCount=5)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 class XenAPI:
@@ -28,7 +34,7 @@ class XenAPI:
         starts specified virtual machine
         :param vm_name name of virtual machine
         """
-        logging.debug('Starting VM - {}'.format(vm_name))
+        logger.debug('Starting VM - {}'.format(vm_name))
         return VirtualMachine(vm_name).start()
 
     def stop_vm(self, vm_name):
@@ -36,20 +42,16 @@ class XenAPI:
         stops the specified vm
         :param vm_name: name of the vm to be stopped
         """
-        try:
-            logging.debug('Stopping VM - {}'.format(vm_name))
-            vm = self.list_vm(vm_name)
-            vm.shutdown()
-        except Exception:
-            logging.exception("Error while shutting down VM - {}".format(vm_name))
-            pass
+        logger.debug('Stopping VM - {}'.format(vm_name))
+        vm = self.list_vm(vm_name)
+        vm.shutdown()
 
     def list_all_vms(self):
         """
         lists all vms in the server (output of xl list)
         :return List of VirtualMachine with id, name, memory, vcpus, state, uptime
         """
-        logging.debug('Listing all VMs..')
+        logger.debug('Listing all VMs..')
         cmd = 'xl list'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -80,7 +82,7 @@ class XenAPI:
         :param vm_name name of virtual machine
         :return VirtualMachine with id, name, memory, vcpus, state, uptime
         """
-        logging.debug('Listing VM {}'.format(vm_name))
+        logger.debug('Listing VM {}'.format(vm_name))
         cmd = 'xl list '+vm_name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -122,6 +124,7 @@ class XenAPI:
         :param base_vm name of base vm qcow and conf
         :param vif virtual interface string for vm
         """
+        logger.debug('Setting up VM - {}'.format(vm_name))
         VirtualMachine(vm_name).setup(base_vm, vif)
 
     def cleanup_vm(self, vm_name):
@@ -129,6 +132,7 @@ class XenAPI:
         registers a new vm
         :param vm_name:
         """
+        logger.debug('Cleaning VM - {}'.format(vm_name))
         VirtualMachine(vm_name).cleanup()
 
     def save_vm(self, vm_name):
@@ -141,34 +145,46 @@ class XenAPI:
         VirtualMachine('zombie').kill_zombie_vms(vm_id)
 
     def create_bridge(self, name):
+        logger.debug('Creating bridge - {}'.format(name))
         cmd = 'brctl addbr '+name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            logging.error('Error while creating bridge - {}'.format(cmd))
+            logger.error('Error while creating bridge - {}'.format(cmd))
+            logger.error('Error while creating bridge - {}'.format(err.rstrip()))
             raise Exception('ERROR : cannot create the bridge. \n Reason : %s' % err.rstrip())
         else:
+            logger.debug('Created bridge - {}'.format(name))
+            logger.debug('Starting bridge - {}'.format(name))
             cmd = 'ifconfig ' + name + ' up'
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
-                logging.error('Error while starting bridge - {}'.format(cmd))
+                logger.error('Error while starting bridge - {}'.format(cmd))
+                logger.error('Error while starting bridge - {}'.format(err.rstrip()))
                 raise Exception('ERROR : cannot start the bridge. \n Reason : %s' % err.rstrip())
+            logger.debug('Started bridge - {}'.format(name))
 
     def remove_bridge(self, name):
+        logger.debug('Stopping bridge - {}'.format(name))
         cmd = 'ifconfig ' + name + ' down'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            logging.error('Error while stopping bridge - {}'.format(cmd))
+            logger.error('Error while stopping bridge - {}'.format(cmd))
+            logger.error('Error while stopping bridge - {}'.format(err.rstrip()))
             raise Exception('ERROR : cannot stop the bridge. \n Reason : %s' % err.rstrip())
         else:
+            logger.debug('Stopped bridge - {}'.format(name))
+            logger.debug('Removing bridge - {}'.format(name))
             cmd = 'brctl delbr ' + name
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
-                logging.error('Error while removing bridge - {}'.format(cmd))
+                logger.error('Error while removing bridge - {}'.format(cmd))
+                logger.error('Error while removing bridge - {}'.format(err.rstrip()))
                 raise Exception('ERROR : cannot remove the bridge. \n Reason : %s' % err.rstrip())
+            logger.debug('Removed bridge - {}'.format(name))
 
 
 class VirtualMachine:
@@ -188,9 +204,11 @@ class VirtualMachine:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            logging.error(' Error while starting VM - {}'.format(cmd))
+            logger.error(' Error while starting VM - {}'.format(cmd))
+            logger.error(err.rstrip())
             raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
         else:
+            logger.debug('VM started - {}'.format(self.name))
             return XenAPI().list_vm(self.name)
 
     def shutdown(self):
@@ -204,15 +222,16 @@ class VirtualMachine:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            # silently ignore if vm is already destroyed
             if 'invalid domain identifier' not in err.rstrip():
-                logging.error(' Cannot find VM to be stopped - {}'.format(cmd))
+                logger.error(' Cannot find VM to be stopped - {}'.format(cmd))
+            else:
                 raise Exception('ERROR : cannot stop the vm '
                                 '\n Reason : %s' % err.rstrip())
+        logger.debug('VM stopped - {}'.format(self.name))
 
         # this is an additional step to deal with old
         # xen-traditional model. Can be removed later
-        self.kill_zombie_vms(self.id)
+        # self.kill_zombie_vms(self.id)
 
     #  This is an additional step to kill zombie VMs if the device model is set to
     #  qemu-traditional in xl conf. SET model to qemu-xen
@@ -222,7 +241,7 @@ class VirtualMachine:
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            logging.error(' Error while finding zombie VMs - {}'.format(cmd))
+            logger.error(' Error while finding zombie VMs - {}'.format(cmd))
             raise Exception('ERROR : trying to find zombie vms. \n Reason : %s' % err.rstrip())
 
         output = out.split("\n")
@@ -244,7 +263,7 @@ class VirtualMachine:
             out, err = p.communicate()
 
             if not p.returncode == 0:
-                logging.error('Cannot kill zombie vms.\n Reason : %s' % (err.rstrip()))
+                logger.error('Cannot kill zombie vms.\n Reason : %s' % (err.rstrip()))
                 pass
 
     def setup(self, base_vm, vif):
@@ -256,8 +275,10 @@ class VirtualMachine:
         try:
             copyfile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
                      config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow')
+            logger.debug('Setup qcow file for ' + self.name)
         except Exception as e:
-            logging.error(' Error while creating new VM dsk - {}'.format(self.name))
+            logger.error(' Error while creating new VM dsk - {}'.format(self.name))
+            logger.error(str(e).rstrip())
             raise Exception('ERROR : cannot setup the vm - qcow '
                             '\n Reason : %s' % str(e).rstrip())
 
@@ -265,7 +286,8 @@ class VirtualMachine:
             copyfile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
                      config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
         except Exception as e:
-            logging.error(' Error while creating VM conf - {}'.format(self.name))
+            logger.error(' Error while creating VM conf - {}'.format(self.name))
+            logger.error(str(e).rstrip())
             raise Exception('ERROR : cannot setup the vm - conf '
                             '\n Reason : %s' % str(e).rstrip())
 
@@ -280,6 +302,8 @@ class VirtualMachine:
         f = open(config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf', 'w')
         f.write(new_data)
         f.close()
+        logger.debug('Setup conf file for ' + self.name)
+        logger.debug('Finished setting up '+self.name)
 
     def cleanup(self):
         """
@@ -288,18 +312,23 @@ class VirtualMachine:
         try:
             for filename in glob(config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.*'):
                 os.remove(filename)
+            logger.debug('Removed qcow file for ' + self.name)
         except Exception as e:
-            logging.error(' Error while removing VM dsk - {}'.format(self.name))
+            logger.error(' Error while removing VM dsk - {}'.format(self.name))
+            logger.error(str(e).rstrip())
             raise Exception('ERROR : cannot unregister the vm - qcow '
                             '\n Reason : %s' % str(e).rstrip())
 
         try:
             os.remove(config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
+            logger.debug('Removed conf file for ' + self.name)
         except OSError as e:
             if e.errno != errno.ENOENT:
-                logging.error(' Error while removing VM conf - {}'.format(self.name))
+                logger.error(' Error while removing VM conf - {}'.format(self.name))
+                logger.error(str(e).rstrip())
                 raise Exception('ERROR : cannot unregister the vm - conf '
                                 '\n Reason : %s' % str(e).rstrip())
+        logger.debug('Finished removing ' + self.name)
 
     # TODO : IDEA :: Auto save - for forced VM shutdowns .autosaved
     def save(self):
@@ -310,7 +339,7 @@ class VirtualMachine:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            logging.error(' Error while saving VM - {}'.format(cmd))
+            logger.error(' Error while saving VM - {}'.format(cmd))
             raise Exception('ERROR : cannot create snapshot the vm \n Reason : %s' % err.rstrip())
 
     def restore(self, base_vm):
@@ -322,7 +351,7 @@ class VirtualMachine:
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
-                logging.error(' Error while restoring VM - {}'.format(cmd))
+                logger.error(' Error while restoring VM - {}'.format(cmd))
                 raise Exception('ERROR : cannot restore snapshot the vm \n Reason : %s' % err.rstrip())
         else:
             self.setup(base_vm)

@@ -3,6 +3,12 @@ from security_util import expose, requires_user_privilege, requires_authenticati
     requires_admin_privilege, is_exposed, is_authorized
 from xen_api import XenAPI
 import SocketServer
+import ConfigParser
+
+config = ConfigParser.ConfigParser()
+
+# TODO change this to a common config file on a shared location
+config.read("/home/vlab/config.ini")
 
 
 # TODO Security to check if requesting user has privilege and callback security model
@@ -93,7 +99,7 @@ class XenAPIExposer:
 class SimpleThreadedXMLRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     pass
 
-server = SimpleThreadedXMLRPCServer(('192.168.35.11', 8000), logRequests=True, allow_none=True)
+server = SimpleThreadedXMLRPCServer((config.get("XenAPI", "IP_ADDRESS"), config.get("XenAPI", "PORT")), logRequests=True, allow_none=True)
 server.register_instance(XenAPIExposer())
 try:
     print 'Use Control-C to exit'
