@@ -5,7 +5,7 @@ import os, errno
 import ConfigParser
 import logging
 
-from logging.handler import RotatingFileHandler
+from logging.handlers import RotatingFileHandler
 
 config = ConfigParser.ConfigParser()
 
@@ -17,7 +17,7 @@ logger = logging.getLogger('xen api')
 logger.setLevel(logging.DEBUG)
 handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024, backupCount=5)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger.setFormatter(formatter)
+handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
