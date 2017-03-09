@@ -209,7 +209,7 @@ class XenAPI:
         out, err = p.communicate()
         logger.debug(out.rstrip())
         logger.debug('<><><><><><>')
-        logger.debug(out.rstrip())
+        logger.debug(err.rstrip())
         if p.returncode == 0:
             if 'No such device' in out.rstrip():
                 return False
