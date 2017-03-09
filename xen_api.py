@@ -125,7 +125,7 @@ class XenAPI:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if p.returncode == 0:
-            logger.debug('Result :'+out.rstrip)
+            logger.debug('Result :'+out.rstrip())
             return True
         else:
             return False
