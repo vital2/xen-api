@@ -94,6 +94,21 @@ class XenAPIExposer:
     def remove_bridge(self, user, passwd, name):
         XenAPI().remove_bridge(name)
 
+    @expose
+    @requires_authentication_only
+    def vm_exists(self, user, passwd, name):
+        XenAPI().vm_exists(name)
+
+    @expose
+    @requires_authentication_only
+    def bridge_exists(self, user, passwd, name):
+        XenAPI().bridge_exists(name)
+
+    @expose
+    @requires_authentication_only
+    def is_bridge_up(self, user, passwd, name):
+        XenAPI().is_bridge_up(name)
+
 
 # allows RPC module to handle concurrent requests
 class SimpleThreadedXMLRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):

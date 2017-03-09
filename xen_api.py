@@ -15,7 +15,7 @@ config.read("/home/vlab/config.ini")
 # TODO change the logging level and file name to be read from config file
 logger = logging.getLogger('xen api')
 logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024, backupCount=5)
+handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024*1024*10, backupCount=5)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
@@ -114,6 +114,22 @@ class XenAPI:
         vm.vnc_port = out.rstrip()
         return vm
 
+    def vm_exists(self, vm_name):
+        """
+        checks if the specified vm exists or not
+        :param vm_name: domain name of the vm
+        :return: boolean based on if domain exists or not
+        """
+        logger.debug('checking if VM {} exists'.format(vm_name))
+        cmd = 'xl list ' + vm_name
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if p.returncode == 0:
+            logger.debug('Result :'+out.rstrip)
+            return True
+        else:
+            return False
+
     def server_stats(self):
         pass
 
@@ -185,6 +201,32 @@ class XenAPI:
                 logger.error('Error while removing bridge - {}'.format(err.rstrip()))
                 raise Exception('ERROR : cannot remove the bridge. \n Reason : %s' % err.rstrip())
             logger.debug('Removed bridge - {}'.format(name))
+
+    def bridge_exists(self, name):
+        logger.debug('Checking if bridge {} exists'.format(name))
+        cmd = 'brctl show '+ name
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if p.returncode == 0:
+            if 'No such device' in out.rstrip():
+                return False
+            else:
+                return True
+        else:
+            return False
+
+    def is_bridge_up(self,name):
+        logger.debug('Checking if bridge {} is up'.format(name))
+        cmd = 'ip a show ' + name + ' up'
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if p.returncode == 0:
+            if out.rstrip() == '' or 'does not exist' in out.rstrip():
+                return False
+            else:
+                return True
+        else:
+            return False
 
 
 class VirtualMachine:
