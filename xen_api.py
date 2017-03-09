@@ -204,14 +204,11 @@ class XenAPI:
 
     def bridge_exists(self, name):
         logger.debug('Checking if bridge {} exists'.format(name))
-        cmd = 'brctl show '+ name
+        cmd = 'ip a show ' + name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
-        logger.debug(out.rstrip())
-        logger.debug('<><><><><><>')
-        logger.debug(err.rstrip())
         if p.returncode == 0:
-            if 'No such device' in out.rstrip():
+            if out.rstrip() == '' or 'does not exist' in out.rstrip():
                 return False
             else:
                 return True
