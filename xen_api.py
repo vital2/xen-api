@@ -207,6 +207,9 @@ class XenAPI:
         cmd = 'brctl show '+ name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
+        logger.debug(out.rstrip())
+        logger.debug('<><><><><><>')
+        logger.debug(out.rstrip())
         if p.returncode == 0:
             if 'No such device' in out.rstrip():
                 return False
