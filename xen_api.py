@@ -43,8 +43,7 @@ class XenAPI:
         :param vm_name: name of the vm to be stopped
         """
         logger.debug('Stopping VM - {}'.format(vm_name))
-        vm = self.list_vm(vm_name)
-        vm.shutdown()
+        VirtualMachine(vm_name).shutdown()
 
     def list_all_vms(self):
         """
