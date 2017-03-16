@@ -186,9 +186,12 @@ class XenAPI:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            logger.error('Error while stopping bridge - {}'.format(cmd))
-            logger.error('Error while stopping bridge - {}'.format(err.rstrip()))
-            raise Exception('ERROR : cannot stop the bridge. \n Reason : %s' % err.rstrip())
+            if 'No such device' in err.rstrip():
+                pass
+            else:
+                logger.error('Error while stopping bridge - {}'.format(cmd))
+                logger.error('Error while stopping bridge - {}'.format(err.rstrip()))
+                raise Exception('ERROR : cannot stop the bridge. \n Reason : %s' % err.rstrip())
         else:
             logger.debug('Stopped bridge - {}'.format(name))
             logger.debug('Removing bridge - {}'.format(name))
@@ -196,9 +199,12 @@ class XenAPI:
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
-                logger.error('Error while removing bridge - {}'.format(cmd))
-                logger.error('Error while removing bridge - {}'.format(err.rstrip()))
-                raise Exception('ERROR : cannot remove the bridge. \n Reason : %s' % err.rstrip())
+                if 'No such device' in err.rstrip():
+                    pass
+                else:
+                    logger.error('Error while removing bridge - {}'.format(cmd))
+                    logger.error('Error while removing bridge - {}'.format(err.rstrip()))
+                    raise Exception('ERROR : cannot remove the bridge. \n Reason : %s' % err.rstrip())
             logger.debug('Removed bridge - {}'.format(name))
 
     def bridge_exists(self, name):
