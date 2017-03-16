@@ -269,8 +269,9 @@ class VirtualMachine:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            if 'invalid domain identifier' not in err.rstrip():
+            if 'invalid domain identifier' in err.rstrip():
                 logger.error(' Cannot find VM to be stopped - {}'.format(cmd))
+                pass
             else:
                 raise Exception('ERROR : cannot stop the vm '
                                 '\n Reason : %s' % err.rstrip())
