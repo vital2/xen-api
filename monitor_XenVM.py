@@ -1,5 +1,6 @@
 import sys
 import logging
+import requests
 
 from logging.handlers import RotatingFileHandler
 from pyxs import Client, PyXSError
@@ -13,7 +14,8 @@ logger.addHandler(handler)
 
 with Client() as c:
     # the sys.arg is the domid which is to be passed to the function call
-    path = c.get_domain_path(int(sys.argv[1]))
+    dom_id = int(sys.argv[1])
+    path = c.get_domain_path(dom_id)
     path = path + '/control/shutdown'
 
     with c.monitor() as m:
@@ -24,7 +26,11 @@ with Client() as c:
         # print(next(m.wait()))
         if next(m.wait()) is not None:
             logger.debug('Event on path {}'.format(path))
-            pass
+            params = {
+	    'xen_server': 'vlab-dev-xen1',
+	    'vm_id': str(dom_id)
+	    }
+	    requests.get("https://vital-dev2.poly.edu/vital/users/release-vm/", params=params)
         # Do the necassary action like calling the script
         # the script may call the vital api to do th enecessary actions
         # maybe we can also send the required domid along with the request 
