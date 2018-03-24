@@ -15,6 +15,9 @@ logger.addHandler(handler)
 with Client() as c:
     # the sys.arg is the domid which is to be passed to the function call
     dom_id = int(sys.argv[1])
+    dom_name = c['/local/domain/{}/name'.format(dom_id)]
+    user_id = dom_name.split('_')[0]
+    vm_id = dom_name.split('_')[2]
     path = c.get_domain_path(dom_id)
     path = path + '/control/shutdown'
 
@@ -27,8 +30,8 @@ with Client() as c:
         if next(m.wait()) is not None:
             logger.debug('Event on path {}'.format(path))
             params = {
-	    'xen_server': 'vlab-dev-xen1',
-	    'vm_id': str(dom_id)
+	    'user_id': user_id,
+	    'vm_id': vm_id
 	    }
 	    requests.get("https://vital-dev2.poly.edu/vital/users/release-vm/", params=params)
         # Do the necassary action like calling the script

@@ -103,7 +103,7 @@ class XenAPI:
 
         # Start the Monitor Xen VM Script to watch the Xenstored Path
         # And let it run in the background we are not worried about collecting the results
-        cmd = '/root/Envs/vital/bin/python /home/vlab/source/xen-api/monitor_XenVM.py ' + vm.id
+        cmd = '/root/Envs/vital/bin/python /home/vlab/source/xen-api/monitor_XenVM.py {}'.format(vm.id)
         logger.debug('Watching VM with Xenstore {}'.format(cmd))
         Popen(cmd.split(), close_fds=True)
 
