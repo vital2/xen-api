@@ -101,12 +101,6 @@ class XenAPI:
         vm.state = val[4]
         vm.uptime = val[5]
 
-        # Start the Monitor Xen VM Script to watch the Xenstored Path
-        # And let it run in the background we are not worried about collecting the results
-        cmd = '/root/Envs/vital/bin/python /home/vlab/source/xen-api/monitor_XenVM.py {}'.format(vm.id)
-        logger.debug('Watching VM with Xenstore {}'.format(cmd))
-        Popen(cmd.split(), close_fds=True)
-
         # even though value of vnc port is set in the config file, if the port is already in use
         # by the vnc server, it allocates a new vnc port without throwing an error. this additional
         # step makes sure that we get the updated vnc-port
@@ -262,7 +256,15 @@ class VirtualMachine:
             raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
         else:
             logger.debug('VM started - {}'.format(self.name))
-            return XenAPI().list_vm(self.name)
+            vm = XenAPI().list_vm(self.name)
+
+            # Start the Monitor Xen VM Script to watch the Xenstored Path
+            # And let it run in the background we are not worried about collecting the results
+            cmd = '/root/Envs/vital/bin/python /home/vlab/source/xen-api/monitor_XenVM.py {}'.format(vm.id)
+            logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            Popen(cmd.split(), close_fds=True)
+
+            return vm
 
     def shutdown(self):
         """
