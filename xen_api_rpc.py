@@ -41,8 +41,8 @@ class XenAPIExposer:
     # TODO - TBD on all functions
     @expose
     @requires_authentication_only
-    def start_vm(self, user, passwd, vm_name):
-        return XenAPI().start_vm(vm_name)
+    def start_vm(self, user, passwd, vm_name, vm_options):
+        return XenAPI().start_vm(vm_name, vm_options)
 
     @expose
     @requires_authentication_only

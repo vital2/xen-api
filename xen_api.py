@@ -30,13 +30,13 @@ class XenAPI:
     def __init__(self):
         pass
 
-    def start_vm(self, vm_name):
+    def start_vm(self, vm_name, vm_options):
         """
         starts specified virtual machine
         :param vm_name name of virtual machine
         """
         logger.debug('Starting VM - {}'.format(vm_name))
-        return VirtualMachine(vm_name).start()
+        return VirtualMachine(vm_name).start(vm_options)
 
     def stop_vm(self, vm_name):
         """
@@ -243,12 +243,13 @@ class VirtualMachine:
     def __init__(self, name):
         self.name = name
 
-    def start(self):
+    def start(self, vm_options):
         """
         starts specified virtual machine
         :return: virtual machine stats with id, name, memory, vcpus, state, uptime, vnc_port
         """
-        cmd = 'xl create ' + config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf'
+        cmd = 'xl create {}/{}.conf {}'.format(
+            config.get("VMConfig", "VM_CONF_LOCATION"), self.name, vm_options)
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
