@@ -77,7 +77,7 @@ class XenAPI:
             vms.append(vm)
         return vms
 
-    def list_vm(self, vm_name, display_port=None):
+    def list_vm(self, vm_name, display_port):
         """
         lists specified virtual machine (output of xl list vm_name)
         :param vm_name name of virtual machine
@@ -105,6 +105,7 @@ class XenAPI:
         vm.uptime = val[5]
 
         if not display_port is None:
+            # The display server being used is SPICE
             vm.vnc_port = display_port
         else:
             # even though value of vnc port is set in the config file, if the port is already in use
@@ -267,6 +268,7 @@ class VirtualMachine:
         :return: virtual machine stats with id, name, memory, vcpus, state, uptime, vnc_port
         """
         # Check if display server is to be spice if yes grab an open port and assign to spice port
+        spice_port = None
         if vm_options:
             spice_port = self.get_free_tcp_port()
             vm_options = vm_options.replace('spiceport="0"', 'spiceport="{}"'.format(spice_port))
