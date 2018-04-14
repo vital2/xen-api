@@ -2,6 +2,7 @@ from subprocess import Popen, PIPE
 from shutil import copyfile
 from glob import glob
 import os, errno
+import socket
 import sys
 import ConfigParser
 import logging
@@ -76,17 +77,18 @@ class XenAPI:
             vms.append(vm)
         return vms
 
-    def list_vm(self, vm_name):
+    def list_vm(self, vm_name, display_port=None):
         """
         lists specified virtual machine (output of xl list vm_name)
         :param vm_name name of virtual machine
+        :param (OPTIONAL) Display Driver used (VNC/Spice)
         :return VirtualMachine with id, name, memory, vcpus, state, uptime
         """
         logger.debug('Listing VM {}'.format(vm_name))
         cmd = 'xl list '+vm_name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
-        if not p.returncode == 0:
+        if p.returncode != 0:
             raise Exception('ERROR : cannot list the vm. \n Reason : %s' % err.rstrip())
 
         output = out.split("\n")
@@ -102,16 +104,20 @@ class XenAPI:
         vm.state = val[4]
         vm.uptime = val[5]
 
-        # even though value of vnc port is set in the config file, if the port is already in use
-        # by the vnc server, it allocates a new vnc port without throwing an error. this additional
-        # step makes sure that we get the updated vnc-port
-        cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-        out, err = p.communicate()
-        if not p.returncode == 0:
-            raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
-                            '\n Reason : %s' % err.rstrip())
-        vm.vnc_port = out.rstrip()
+        if not display_port is None:
+            vm.vnc_port = display_port
+        else:
+            # even though value of vnc port is set in the config file, if the port is already in use
+            # by the vnc server, it allocates a new vnc port without throwing an error.
+            # this additional step makes sure that we get the updated vnc-port
+            cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+            p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            out, err = p.communicate()
+            if not p.returncode == 0:
+                raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
+                                '\n Reason : %s' % err.rstrip())
+            vm.vnc_port = out.rstrip()
+
         return vm
 
     def vm_exists(self, vm_name):
@@ -243,22 +249,39 @@ class VirtualMachine:
     def __init__(self, name):
         self.name = name
 
+    def get_free_tcp_port(self):
+        """
+        Starts a socket connection to grab a free port (Involves a race
+            condition but will do for now)
+        :return: An open port in the system
+        """
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp.bind(('', 0))
+        _, port = tcp.getsockname()
+        tcp.close()
+        return port
+
     def start(self, vm_options):
         """
         starts specified virtual machine
         :return: virtual machine stats with id, name, memory, vcpus, state, uptime, vnc_port
         """
+        # Check if display server is to be spice if yes grab an open port and assign to spice port
+        if vm_options:
+            spice_port = self.get_free_tcp_port()
+            vm_options = vm_options.replace('spiceport="0"', 'spiceport="{}"'.format(spice_port))
+
         cmd = 'xl create {}/{}.conf {}'.format(
             config.get("VMConfig", "VM_CONF_LOCATION"), self.name, vm_options)
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
-        if not p.returncode == 0:
+        if p.returncode != 0:
             logger.error(' Error while starting VM - {}'.format(cmd))
             logger.error(err.rstrip())
             raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
         else:
             logger.debug('VM started - {}'.format(self.name))
-            vm = XenAPI().list_vm(self.name)
+            vm = XenAPI().list_vm(self.name, spice_port)
 
             # Start the Monitor Xen VM Script to watch the Xenstored Path
             # And let it run in the background we are not worried about collecting the results
