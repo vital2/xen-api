@@ -8,6 +8,7 @@ import ConfigParser
 import logging
 
 from logging.handlers import RotatingFileHandler
+from pyxs import Client, PyXSError
 
 config = ConfigParser.ConfigParser()
 
@@ -36,8 +37,21 @@ class XenAPI:
         starts specified virtual machine
         :param vm_name name of virtual machine
         """
-        logger.debug('Starting VM - {}'.format(vm_name))
-        return VirtualMachine(vm_name).start(vm_options)
+        if not self.vm_exists(vm_name):
+            logger.debug('Starting VM - {}'.format(vm_name))
+            return VirtualMachine(vm_name).start(vm_options)
+        else:
+            logger.debug('VM already Exists - {}'.format(vm_name))
+            vm = self.list_vm(vm_name, None)
+
+            # Start the Monitor Xen VM Script to watch the Xenstored Path
+            # And let it run in the background we are not worried about collecting the results
+            cmd = '{} {}/monitor_XenVM.py {}'.format(
+                sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            Popen(cmd.split(), close_fds=True)
+
+            return vm
 
     def stop_vm(self, vm_name):
         """
@@ -127,7 +141,7 @@ class XenAPI:
         :param vm_name: domain name of the vm
         :return: boolean based on if domain exists or not
         """
-        logger.debug('checking if VM {} exists'.format(vm_name))
+        logger.debug('Checking if VM {} exists'.format(vm_name))
         cmd = 'xl list ' + vm_name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
