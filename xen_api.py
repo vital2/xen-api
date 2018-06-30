@@ -5,8 +5,11 @@ import os, errno
 import sys
 import ConfigParser
 import logging
+import requests
 
 from logging.handlers import RotatingFileHandler
+from pyxs import Client, PyXSError
+from threading import Thread
 
 config = ConfigParser.ConfigParser()
 
@@ -261,10 +264,13 @@ class VirtualMachine:
 
             # Start the Monitor Xen VM Script to watch the Xenstored Path
             # And let it run in the background we are not worried about collecting the results
-            cmd = '{} {}/monitor_XenVM.py {}'.format(
-                sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
-            logger.debug('Watching VM with Xenstore {}'.format(cmd))
-            Popen(cmd.split(), close_fds=True)
+            # cmd = '{} {}/monitor_XenVM.py {}'.format(
+            #     sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            # logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            # Popen(cmd.split(), close_fds=True)
+
+            background_thread = Thread(target=self.listenToVMShutdown, args=(vm.id,))
+            background_thread.start()
 
             return vm
 
@@ -413,3 +419,28 @@ class VirtualMachine:
                 raise Exception('ERROR : cannot restore snapshot the vm \n Reason : %s' % err.rstrip())
         else:
             self.setup(base_vm)
+
+    def listenToVMShutdown(self, dom_id):
+        with Client() as c:
+          # the sys.arg is the domid which is to be passed to the function call
+          # dom_id = int(sys.argv[1])
+          dom_name = c['/local/domain/{}/name'.format(dom_id)]
+          user_id = dom_name.split('_')[0]
+          vm_id = dom_name.split('_')[2]
+          logger.debug('VM {}, {}'.format(user_id, vm_id))
+          path = c.get_domain_path(dom_id)
+          path = path + '/control/shutdown'
+          api_key = config.get('Security', 'INTERNAL_API_KEY')
+          logger.debug('{}: {}'.format(config.get("VITAL", "SERVER_NAME"), api_key))
+
+          with c.monitor() as m:
+            # watch for any random string
+            m.watch(path, b'baz')
+            logger.debug('Watching path {}'.format(path))
+            next(m.wait())
+
+            if next(m.wait()) is not None:
+                logger.debug('Event on path {}'.format(path))
+                params = {'api_key': api_key, 'user_id': user_id, 'vm_id': vm_id}
+
+            requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/release-vm/', params=params)
