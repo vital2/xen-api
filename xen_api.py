@@ -123,6 +123,7 @@ class XenAPI:
         vm.vcpus = val[3]
         vm.state = val[4]
         vm.uptime = val[5]
+        vm.vnc_port = None
 
         if not display_port is None:
             # The display server being used is SPICE
@@ -131,14 +132,20 @@ class XenAPI:
             # even though value of vnc port is set in the config file, if the port is already in use
             # by the vnc server, it allocates a new vnc port without throwing an error.
             # this additional step makes sure that we get the updated vnc-port
-            cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-            p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-            out, err = p.communicate()
-            if not p.returncode == 0:
-                raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
-                                '\n Reason : %s' % err.rstrip())
-            vm.vnc_port = out.rstrip()
+            #cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+            #p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            #out, err = p.communicate()
+            #if not p.returncode == 0:
+            #    raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
+            #                    '\n Reason : %s' % err.rstrip())
+            #vm.vnc_port = out.rstrip()
+            with Client() as c:
+                vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
 
+        if vm.vnc_port is None:
+            raise Exception('ERROR : cannot start the vm - error while getting vnc-port.')
+
+        logger.debug('Display Port for VM Id {} is {}'.format(vm.id, vm.vnc_port))
         return vm
 
     def vm_exists(self, vm_name):
