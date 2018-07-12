@@ -117,7 +117,7 @@ class XenAPI:
         # vm.vnc_port = out.rstrip()
 
         with Client() as c:
-                vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
+            vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
 
         if vm.vnc_port is None:
             raise Exception('ERROR : cannot start the vm - error while getting vnc-port.')
