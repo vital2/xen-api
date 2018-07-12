@@ -108,13 +108,20 @@ class XenAPI:
         # even though value of vnc port is set in the config file, if the port is already in use
         # by the vnc server, it allocates a new vnc port without throwing an error. this additional
         # step makes sure that we get the updated vnc-port
-        cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-        out, err = p.communicate()
-        if not p.returncode == 0:
-            raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
-                            '\n Reason : %s' % err.rstrip())
-        vm.vnc_port = out.rstrip()
+        # cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+        # p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        # out, err = p.communicate()
+        # if not p.returncode == 0:
+        #     raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
+        #                     '\n Reason : %s' % err.rstrip())
+        # vm.vnc_port = out.rstrip()
+
+        with Client() as c:
+                vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
+
+        if vm.vnc_port is None:
+            raise Exception('ERROR : cannot start the vm - error while getting vnc-port.')
+
         return vm
 
     def vm_exists(self, vm_name):
