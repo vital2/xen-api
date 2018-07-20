@@ -6,9 +6,11 @@ import socket
 import sys
 import ConfigParser
 import logging
+import requests
 
 from logging.handlers import RotatingFileHandler
 from pyxs import Client, PyXSError
+from threading import Thread
 
 config = ConfigParser.ConfigParser()
 
@@ -39,19 +41,23 @@ class XenAPI:
         """
         if not self.vm_exists(vm_name):
             logger.debug('Starting VM - {}'.format(vm_name))
-            return VirtualMachine(vm_name).start(vm_options)
+            vm = VirtualMachine(vm_name).start(vm_options)
         else:
             logger.debug('VM already Exists - {}'.format(vm_name))
             vm = self.list_vm(vm_name, None)
 
             # Start the Monitor Xen VM Script to watch the Xenstored Path
             # And let it run in the background we are not worried about collecting the results
-            cmd = '{} {}/monitor_XenVM.py {}'.format(
-                sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
-            logger.debug('Watching VM with Xenstore {}'.format(cmd))
-            Popen(cmd.split(), close_fds=True)
+            # cmd = '{} {}/monitor_XenVM.py {}'.format(
+            #     sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            # logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            # Popen(cmd.split(), close_fds=True)
+            # Using Threading Module to send the function to background
 
-            return vm
+        background_thread = Thread(target=self.listenToVMShutdown, args=(vm.id,))
+        background_thread.start()
+
+        return vm
 
     def stop_vm(self, vm_name):
         """
@@ -117,6 +123,7 @@ class XenAPI:
         vm.vcpus = val[3]
         vm.state = val[4]
         vm.uptime = val[5]
+        vm.vnc_port = None
 
         if not display_port is None:
             # The display server being used is SPICE
@@ -125,14 +132,20 @@ class XenAPI:
             # even though value of vnc port is set in the config file, if the port is already in use
             # by the vnc server, it allocates a new vnc port without throwing an error.
             # this additional step makes sure that we get the updated vnc-port
-            cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-            p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-            out, err = p.communicate()
-            if not p.returncode == 0:
-                raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
-                                '\n Reason : %s' % err.rstrip())
-            vm.vnc_port = out.rstrip()
+            #cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+            #p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            #out, err = p.communicate()
+            #if not p.returncode == 0:
+            #    raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
+            #                    '\n Reason : %s' % err.rstrip())
+            #vm.vnc_port = out.rstrip()
+            with Client() as c:
+                vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
 
+        if vm.vnc_port is None:
+            raise Exception('ERROR : cannot start the vm - error while getting vnc-port.')
+
+        logger.debug('Display Port for VM Id {} is {}'.format(vm.id, vm.vnc_port))
         return vm
 
     def vm_exists(self, vm_name):
@@ -333,10 +346,10 @@ class VirtualMachine:
 
             # Start the Monitor Xen VM Script to watch the Xenstored Path
             # And let it run in the background we are not worried about collecting the results
-            cmd = '{} {}/monitor_XenVM.py {}'.format(
-                sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
-            logger.debug('Watching VM with Xenstore {}'.format(cmd))
-            Popen(cmd.split(), close_fds=True)
+            # cmd = '{} {}/monitor_XenVM.py {}'.format(
+            #    sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            # logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            # Popen(cmd.split(), close_fds=True)
 
             return vm
 
