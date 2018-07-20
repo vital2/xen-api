@@ -255,6 +255,38 @@ class XenAPI:
         else:
             return False
 
+    def get_dom_details(self):
+        """
+        lists all vms in the server (output of xentop)
+        :return List of VirtualMachine with name, state, cpu, memory and network details
+        """
+        logger.debug('Listing Xentop..')
+        cmd = 'xentop -b -i1'
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if not p.returncode == 0:
+            raise Exception('ERROR : cannot list all the vms. \n Reason : %s' % err.rstrip())
+
+        vms = []
+        output = out.strip().split("\n")
+        for i in range(1, len(output)):
+            # removing first line
+            line = output[i]
+            line = " ".join(line.split())
+            val = line.split(" ")
+
+            # creating VirtualMachine instances to return
+            vm = VirtualMachine(val[0])
+            vm.state = val[1]
+            vm.cpu_secs = val[2]
+            vm.cpu_per = val[3]
+            vm.mem = val[4]
+            vm.mem_per = val[5]
+            vm.vcpus = val[8]
+            vm.nets = val[9]
+            vms.append(vm)
+        return vms
+
 
 class VirtualMachine:
     """

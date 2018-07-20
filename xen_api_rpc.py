@@ -66,6 +66,11 @@ class XenAPIExposer:
 
     @expose
     @requires_authentication_only
+    def get_dom_details(self, user, passwd):
+        return XenAPI().get_dom_details()
+
+    @expose
+    @requires_authentication_only
     def list_vm(self, user, passwd, vm_name):
         return XenAPI().list_vm(vm_name)
 
