@@ -268,6 +268,31 @@ class XenAPI:
         else:
             return False
 
+    def listenToVMShutdown(self, dom_id):
+        with Client() as c:
+          # the sys.arg is the domid which is to be passed to the function call
+          # dom_id = int(sys.argv[1])
+          dom_name = c['/local/domain/{}/name'.format(dom_id)]
+          user_id = dom_name.split('_')[0]
+          vm_id = dom_name.split('_')[2]
+          logger.debug('VM {}, {}'.format(user_id, vm_id))
+          path = c.get_domain_path(dom_id)
+          path = path + '/control/shutdown'
+          api_key = config.get('Security', 'INTERNAL_API_KEY')
+          logger.debug('{}: {}'.format(config.get("VITAL", "SERVER_NAME"), api_key))
+
+          with c.monitor() as m:
+            # watch for any random string
+            m.watch(path, b'baz')
+            logger.debug('Watching path {}'.format(path))
+            next(m.wait())
+
+            if next(m.wait()) is not None:
+                logger.debug('Event on path {}'.format(path))
+                params = {'api_key': api_key, 'user_id': user_id, 'vm_id': vm_id}
+
+            requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/release-vm/', params=params)
+
     def get_dom_details(self):
         """
         lists all vms in the server (output of xentop)
