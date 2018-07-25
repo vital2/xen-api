@@ -289,9 +289,9 @@ class XenAPI:
 
             if next(m.wait()) is not None:
                 logger.debug('Event on path {}'.format(path))
-                params = {'api_key': api_key, 'user_id': user_id, 'vm_id': vm_id}
+                params = {'api_key': api_key}
 
-            requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/release-vm/', params=params)
+            requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
 
     def get_dom_details(self):
         """
