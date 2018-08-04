@@ -206,7 +206,7 @@ class XenAPI:
         else:
             logger.debug('Created bridge - {}'.format(name))
             logger.debug('Starting bridge - {}'.format(name))
-            cmd = 'ifconfig ' + name + ' up'
+            cmd = 'ip link set dev ' + name + ' up'
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
@@ -217,7 +217,7 @@ class XenAPI:
 
     def remove_bridge(self, name):
         logger.debug('Stopping bridge - {}'.format(name))
-        cmd = 'ifconfig ' + name + ' down'
+        cmd = 'ip link set dev ' + name + ' down'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
