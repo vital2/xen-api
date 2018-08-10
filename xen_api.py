@@ -7,6 +7,8 @@ import sys
 import ConfigParser
 import logging
 import requests
+import zmq
+import json
 
 from logging.handlers import RotatingFileHandler
 from pyxs import Client, PyXSError
@@ -25,6 +27,10 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+# Initialize zmq contexts
+ctx = zmq.Context()
+task_socket = ctx.socket(zmq.PUSH)
+task_socket.connect('tcp://Vlab-server:5000')
 
 class XenAPI:
     """
@@ -72,7 +78,7 @@ class XenAPI:
         lists all vms in the server (output of xl list)
         :return List of VirtualMachine with id, name, memory, vcpus, state, uptime
         """
-        logger.debug('Listing all VMs..')
+        # logger.debug('Listing all VMs..')
         cmd = 'xl list'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -269,29 +275,34 @@ class XenAPI:
             return False
 
     def listenToVMShutdown(self, dom_id):
-        with Client() as c:
-          # the sys.arg is the domid which is to be passed to the function call
-          # dom_id = int(sys.argv[1])
-          dom_name = c['/local/domain/{}/name'.format(dom_id)]
-          user_id = dom_name.split('_')[0]
-          vm_id = dom_name.split('_')[2]
-          logger.debug('VM {}, {}'.format(user_id, vm_id))
-          path = c.get_domain_path(dom_id)
-          path = path + '/control/shutdown'
-          api_key = config.get('Security', 'INTERNAL_API_KEY')
-          logger.debug('{}: {}'.format(config.get("VITAL", "SERVER_NAME"), api_key))
+        try:
+            with Client() as c:
+                # the sys.arg is the domid which is to be passed to the function call
+                # dom_id = int(sys.argv[1])
+                dom_name = c['/local/domain/{}/name'.format(dom_id)]
+                user_id = dom_name.split('_')[0]
+                vm_id = dom_name.split('_')[2]
+                course_id = dom_name.split('_')[1]
+                logger.debug('VM {}, {}'.format(user_id, vm_id))
+                path = c.get_domain_path(dom_id)
+                path = path + '/control/shutdown'
 
-          with c.monitor() as m:
-            # watch for any random string
-            m.watch(path, b'baz')
-            logger.debug('Watching path {}'.format(path))
-            next(m.wait())
+                with c.monitor() as m:
+                    # watch for any random string
+                    m.watch(path, b'baz')
+                    logger.debug('Watching path {}'.format(path))
+                    next(m.wait())
 
-            if next(m.wait()) is not None:
-                logger.debug('Event on path {}'.format(path))
-                params = {'api_key': api_key}
+                    if next(m.wait()) is not None:
+                        logger.debug('Event on path {}'.format(path))
 
-            requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
+                        # Send update via ZMQ Socket
+                        task_kwargs = {'user_id': user_id, 'course_id': course_id, 'vm_id': vm_id,}
+                        task_socket.send_json({'task': 'release_vm', 'task_kwargs': task_kwargs,})
+                        # requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
+
+        except Exception as e:
+	    logger.error(str(e))
 
     def get_dom_details(self):
         """
