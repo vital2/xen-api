@@ -2,10 +2,14 @@ from subprocess import Popen, PIPE
 from shutil import copyfile
 from glob import glob
 import os, errno
+import sys
 import ConfigParser
 import logging
+import zmq
 
 from logging.handlers import RotatingFileHandler
+from pyxs import Client, PyXSError
+from threading import Thread
 
 config = ConfigParser.ConfigParser()
 
@@ -19,6 +23,11 @@ handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024*1024*1
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+# Initialize zmq contexts
+ctx = zmq.Context()
+task_socket = ctx.socket(zmq.PUSH)
+task_socket.connect('tcp://Vlab-server:5000')
 
 
 class XenAPI:
@@ -104,13 +113,20 @@ class XenAPI:
         # even though value of vnc port is set in the config file, if the port is already in use
         # by the vnc server, it allocates a new vnc port without throwing an error. this additional
         # step makes sure that we get the updated vnc-port
-        cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-        out, err = p.communicate()
-        if not p.returncode == 0:
-            raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
-                            '\n Reason : %s' % err.rstrip())
-        vm.vnc_port = out.rstrip()
+        # cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+        # p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        # out, err = p.communicate()
+        # if not p.returncode == 0:
+        #     raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
+        #                     '\n Reason : %s' % err.rstrip())
+        # vm.vnc_port = out.rstrip()
+
+        with Client() as c:
+            vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
+
+        if vm.vnc_port is None:
+            raise Exception('ERROR : cannot start the vm - error while getting vnc-port.')
+
         return vm
 
     def vm_exists(self, vm_name):
@@ -256,7 +272,19 @@ class VirtualMachine:
             raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
         else:
             logger.debug('VM started - {}'.format(self.name))
-            return XenAPI().list_vm(self.name)
+            vm = XenAPI().list_vm(self.name)
+
+            # Start the Monitor Xen VM Script to watch the Xenstored Path
+            # And let it run in the background we are not worried about collecting the results
+            # cmd = '{} {}/monitor_XenVM.py {}'.format(
+            #     sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            # logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            # Popen(cmd.split(), close_fds=True)
+
+            background_thread = Thread(target=self.listenToVMShutdown, args=(vm.id,))
+            background_thread.start()
+
+            return vm
 
     def shutdown(self):
         """
@@ -403,3 +431,29 @@ class VirtualMachine:
                 raise Exception('ERROR : cannot restore snapshot the vm \n Reason : %s' % err.rstrip())
         else:
             self.setup(base_vm)
+
+    def listenToVMShutdown(self, dom_id):
+        with Client() as c:
+          # the sys.arg is the domid which is to be passed to the function call
+          # dom_id = int(sys.argv[1])
+          dom_name = c['/local/domain/{}/name'.format(dom_id)]
+          user_id = dom_name.split('_')[0]
+          vm_id = dom_name.split('_')[2]
+          course_id = dom_name.split('_')[1]
+          logger.debug('VM {}, {}'.format(user_id, vm_id))
+          path = c.get_domain_path(dom_id)
+          path = path + '/control/shutdown'
+
+          with c.monitor() as m:
+            # watch for any random string
+            m.watch(path, b'baz')
+            logger.debug('Watching path {}'.format(path))
+            next(m.wait())
+
+            if next(m.wait()) is not None:
+                logger.debug('Event on path {}'.format(path))
+
+            # Send update via ZMQ Socket
+            task_kwargs = {'user_id': user_id, 'course_id': course_id, 'vm_id': vm_id,}
+            task_socket.send_json({'task': 'release_vm', 'task_kwargs': task_kwargs,})
+            # requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
