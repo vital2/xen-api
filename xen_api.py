@@ -5,7 +5,7 @@ import os, errno
 import sys
 import ConfigParser
 import logging
-import requests
+import zmq
 
 from logging.handlers import RotatingFileHandler
 from pyxs import Client, PyXSError
@@ -23,6 +23,11 @@ handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024*1024*1
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+# Initialize zmq contexts
+ctx = zmq.Context()
+task_socket = ctx.socket(zmq.PUSH)
+task_socket.connect('tcp://Vlab-server:5000')
 
 
 class XenAPI:
@@ -434,11 +439,10 @@ class VirtualMachine:
           dom_name = c['/local/domain/{}/name'.format(dom_id)]
           user_id = dom_name.split('_')[0]
           vm_id = dom_name.split('_')[2]
+          course_id = dom_name.split('_')[1]
           logger.debug('VM {}, {}'.format(user_id, vm_id))
           path = c.get_domain_path(dom_id)
           path = path + '/control/shutdown'
-          api_key = config.get('Security', 'INTERNAL_API_KEY')
-          logger.debug('{}: {}'.format(config.get("VITAL", "SERVER_NAME"), api_key))
 
           with c.monitor() as m:
             # watch for any random string
@@ -448,6 +452,8 @@ class VirtualMachine:
 
             if next(m.wait()) is not None:
                 logger.debug('Event on path {}'.format(path))
-                params = {'api_key': api_key}
 
-            requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
+            # Send update via ZMQ Socket
+            task_kwargs = {'user_id': user_id, 'course_id': course_id, 'vm_id': vm_id,}
+            task_socket.send_json({'task': 'release_vm', 'task_kwargs': task_kwargs,})
+            # requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
