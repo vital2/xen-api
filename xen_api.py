@@ -1,6 +1,6 @@
 from subprocess import Popen, PIPE
-from shutil import copyfile
 from glob import glob
+import shutil
 import os, errno
 import socket
 import sys
@@ -452,7 +452,7 @@ class VirtualMachine:
         :param vif : vif to be assigned to the vm
         """
         try:
-            copyfile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
+            self.copyFile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
                      config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow')
             logger.debug('Setup qcow file for ' + self.name)
         except Exception as e:
@@ -462,7 +462,7 @@ class VirtualMachine:
                             '\n Reason : %s' % str(e).rstrip())
 
         try:
-            copyfile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
+            self.copyFile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
                      config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
         except Exception as e:
             logger.error(' Error while creating VM conf - {}'.format(self.name))
@@ -483,6 +483,45 @@ class VirtualMachine:
         f.close()
         logger.debug('Setup conf file for ' + self.name)
         logger.debug('Finished setting up '+self.name)
+
+    def copyFile(self, src, dst, buffer_size=10485760, perserveFileDate=True):
+        '''
+        Copies a file to a new location. Overriding the Apache Commons due to use of larger 
+        buffer much faster performance than before.
+        @param src:    Source File
+        @param dst:    Destination File (not file path)
+        @param buffer_size:    Buffer size to use during copy
+        @param perserveFileDate:    Preserve the original file date
+        '''
+        # Check to make sure destination directory exists. If it doesn't create the directory
+        dstParent, dstFileName = os.path.split(dst)
+        if(not(os.path.exists(dstParent))):
+            os.makedirs(dstParent)
+
+        # Optimize the buffer for small files
+        buffer_size = min(buffer_size,os.path.getsize(src))
+        if(buffer_size == 0):
+            buffer_size = 1024
+
+        if shutil._samefile(src, dst):
+            raise shutil.Error("`%s` and `%s` are the same file" % (src, dst))
+        for fn in [src, dst]:
+            try:
+                st = os.stat(fn)
+            except OSError:
+                # File most likely does not exist
+                pass
+            else:
+                # XXX What about other special files? (sockets, devices...)
+                if shutil.stat.S_ISFIFO(st.st_mode):
+                    raise shutil.SpecialFileError("`%s` is a named pipe" % fn)
+
+        with open(src, 'rb') as fsrc:
+            with open(dst, 'wb') as fdst:
+                shutil.copyfileobj(fsrc, fdst, buffer_size)
+
+        if(perserveFileDate):
+            shutil.copystat(src, dst)
 
     def cleanup(self):
         """
