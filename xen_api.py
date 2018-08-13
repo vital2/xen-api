@@ -453,7 +453,7 @@ class VirtualMachine:
         """
         try:
             self.copyFile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
-                     config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow')
+                     config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow', perserveFileDate=False)
             logger.debug('Setup qcow file for ' + self.name)
         except Exception as e:
             logger.error(' Error while creating new VM dsk - {}'.format(self.name))
@@ -463,7 +463,7 @@ class VirtualMachine:
 
         try:
             self.copyFile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
-                     config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
+                     config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf', perserveFileDate=False)
         except Exception as e:
             logger.error(' Error while creating VM conf - {}'.format(self.name))
             logger.error(str(e).rstrip())
