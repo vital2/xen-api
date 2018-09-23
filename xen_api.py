@@ -6,7 +6,6 @@ import socket
 import sys
 import ConfigParser
 import logging
-import requests
 import zmq
 import json
 
@@ -309,7 +308,7 @@ class XenAPI:
         lists all vms in the server (output of xentop)
         :return List of VirtualMachine with name, state, cpu, memory and network details
         """
-        logger.debug('Listing Xentop..')
+        # logger.debug('Listing Xentop..')
         cmd = 'xentop -b -i1'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
