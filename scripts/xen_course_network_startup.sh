@@ -3,8 +3,8 @@
 function create_bond {
     vlan=$1
     vconfig add bond0 $vlan
-    ifconfig bond0.$vlan up
-
+    # ifconfig bond0.$vlan up
+    ip link set bond0.$vlan up
 }
 
 function add_bridge_if {
@@ -12,7 +12,8 @@ function add_bridge_if {
   bond=$2
   echo "Creating $bond on $brdg"
   brctl addbr $brdg
-  ifconfig $brdg up
+  # ifconfig $brdg up
+  ip link set dev $brdg up
   brctl addif $brdg $bond
 }
 
