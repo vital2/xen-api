@@ -16,12 +16,12 @@ from threading import Thread
 config = ConfigParser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
-config.read("/home/vlab/config.ini")
+config.read("/home/vital/config.ini")
 
 # TODO change the logging level and file name to be read from config file
 logger = logging.getLogger('xen api')
 logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler('/home/vlab/log/xen-api.log', maxBytes=1024*1024*10, backupCount=5)
+handler = RotatingFileHandler('/home/vital/log/xen-api.log', maxBytes=1024*1024*10, backupCount=5)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)

@@ -8,7 +8,7 @@ import ConfigParser
 config = ConfigParser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
-config.read("/home/vlab/config.ini")
+config.read("/home/vital/config.ini")
 
 
 # TODO Security to check if requesting user has privilege and callback security model
