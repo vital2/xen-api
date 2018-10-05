@@ -1,11 +1,17 @@
 from subprocess import Popen, PIPE
-from shutil import copyfile
 from glob import glob
+import shutil
 import os, errno
+import socket
+import sys
 import ConfigParser
 import logging
+import zmq
+import json
 
 from logging.handlers import RotatingFileHandler
+from pyxs import Client, PyXSError
+from threading import Thread
 
 config = ConfigParser.ConfigParser()
 
@@ -20,6 +26,10 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+# Initialize zmq contexts
+ctx = zmq.Context()
+task_socket = ctx.socket(zmq.PUSH)
+task_socket.connect('tcp://Vlab-server:5000')
 
 class XenAPI:
     """
@@ -29,13 +39,30 @@ class XenAPI:
     def __init__(self):
         pass
 
-    def start_vm(self, vm_name):
+    def start_vm(self, vm_name, vm_options):
         """
         starts specified virtual machine
         :param vm_name name of virtual machine
         """
-        logger.debug('Starting VM - {}'.format(vm_name))
-        return VirtualMachine(vm_name).start()
+        if not self.vm_exists(vm_name):
+            logger.debug('Starting VM - {}'.format(vm_name))
+            vm = VirtualMachine(vm_name).start(vm_options)
+        else:
+            logger.debug('VM already Exists - {}'.format(vm_name))
+            vm = self.list_vm(vm_name, None)
+
+            # Start the Monitor Xen VM Script to watch the Xenstored Path
+            # And let it run in the background we are not worried about collecting the results
+            # cmd = '{} {}/monitor_XenVM.py {}'.format(
+            #     sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            # logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            # Popen(cmd.split(), close_fds=True)
+            # Using Threading Module to send the function to background
+
+        background_thread = Thread(target=self.listenToVMShutdown, args=(vm.id,))
+        background_thread.start()
+
+        return vm
 
     def stop_vm(self, vm_name):
         """
@@ -50,7 +77,7 @@ class XenAPI:
         lists all vms in the server (output of xl list)
         :return List of VirtualMachine with id, name, memory, vcpus, state, uptime
         """
-        logger.debug('Listing all VMs..')
+        # logger.debug('Listing all VMs..')
         cmd = 'xl list'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -75,17 +102,18 @@ class XenAPI:
             vms.append(vm)
         return vms
 
-    def list_vm(self, vm_name):
+    def list_vm(self, vm_name, display_port):
         """
         lists specified virtual machine (output of xl list vm_name)
         :param vm_name name of virtual machine
+        :param (OPTIONAL) Display Driver used (VNC/Spice)
         :return VirtualMachine with id, name, memory, vcpus, state, uptime
         """
         logger.debug('Listing VM {}'.format(vm_name))
         cmd = 'xl list '+vm_name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
-        if not p.returncode == 0:
+        if p.returncode != 0:
             raise Exception('ERROR : cannot list the vm. \n Reason : %s' % err.rstrip())
 
         output = out.split("\n")
@@ -100,17 +128,29 @@ class XenAPI:
         vm.vcpus = val[3]
         vm.state = val[4]
         vm.uptime = val[5]
+        vm.vnc_port = None
 
-        # even though value of vnc port is set in the config file, if the port is already in use
-        # by the vnc server, it allocates a new vnc port without throwing an error. this additional
-        # step makes sure that we get the updated vnc-port
-        cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-        out, err = p.communicate()
-        if not p.returncode == 0:
-            raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
-                            '\n Reason : %s' % err.rstrip())
-        vm.vnc_port = out.rstrip()
+        if not display_port is None:
+            # The display server being used is SPICE
+            vm.vnc_port = display_port
+        else:
+            # even though value of vnc port is set in the config file, if the port is already in use
+            # by the vnc server, it allocates a new vnc port without throwing an error.
+            # this additional step makes sure that we get the updated vnc-port
+            #cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+            #p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            #out, err = p.communicate()
+            #if not p.returncode == 0:
+            #    raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
+            #                    '\n Reason : %s' % err.rstrip())
+            #vm.vnc_port = out.rstrip()
+            with Client() as c:
+                vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
+
+        if vm.vnc_port is None:
+            raise Exception('ERROR : cannot start the vm - error while getting vnc-port.')
+
+        logger.debug('Display Port for VM Id {} is {}'.format(vm.id, vm.vnc_port))
         return vm
 
     def vm_exists(self, vm_name):
@@ -119,7 +159,7 @@ class XenAPI:
         :param vm_name: domain name of the vm
         :return: boolean based on if domain exists or not
         """
-        logger.debug('checking if VM {} exists'.format(vm_name))
+        logger.debug('Checking if VM {} exists'.format(vm_name))
         cmd = 'xl list ' + vm_name
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -171,7 +211,7 @@ class XenAPI:
         else:
             logger.debug('Created bridge - {}'.format(name))
             logger.debug('Starting bridge - {}'.format(name))
-            cmd = 'ifconfig ' + name + ' up'
+            cmd = 'ip link set dev ' + name + ' up'
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
@@ -182,7 +222,7 @@ class XenAPI:
 
     def remove_bridge(self, name):
         logger.debug('Stopping bridge - {}'.format(name))
-        cmd = 'ifconfig ' + name + ' down'
+        cmd = 'ip link set dev ' + name + ' down'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
@@ -233,6 +273,68 @@ class XenAPI:
         else:
             return False
 
+    def listenToVMShutdown(self, dom_id):
+        try:
+            with Client() as c:
+                # the sys.arg is the domid which is to be passed to the function call
+                # dom_id = int(sys.argv[1])
+                dom_name = c['/local/domain/{}/name'.format(dom_id)]
+                user_id = dom_name.split('_')[0]
+                vm_id = dom_name.split('_')[2]
+                course_id = dom_name.split('_')[1]
+                logger.debug('VM {}, {}'.format(user_id, vm_id))
+                path = c.get_domain_path(dom_id)
+                path = path + '/control/shutdown'
+
+                with c.monitor() as m:
+                    # watch for any random string
+                    m.watch(path, b'baz')
+                    logger.debug('Watching path {}'.format(path))
+                    next(m.wait())
+
+                    if next(m.wait()) is not None:
+                        logger.debug('Event on path {}'.format(path))
+
+                        # Send update via ZMQ Socket
+                        task_kwargs = {'user_id': user_id, 'course_id': course_id, 'vm_id': vm_id,}
+                        task_socket.send_json({'task': 'release_vm', 'task_kwargs': task_kwargs,})
+                        # requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
+
+        except Exception as e:
+	    logger.error(str(e))
+
+    def get_dom_details(self):
+        """
+        lists all vms in the server (output of xentop)
+        :return List of VirtualMachine with name, state, cpu, memory and network details
+        """
+        # logger.debug('Listing Xentop..')
+        cmd = 'xentop -b -i1'
+        p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if not p.returncode == 0:
+            raise Exception('ERROR : cannot list all the vms. \n Reason : %s' % err.rstrip())
+
+        vms = []
+        output = out.strip().split("\n")
+        for i in range(1, len(output)):
+            # removing first line
+            line = output[i]
+            line = " ".join(line.split())
+            val = line.split(" ")
+
+            # creating VirtualMachine instances to return
+            vm = VirtualMachine(val[0])
+            vm.state = val[1]
+            vm.cpu_secs = val[2]
+            vm.cpu_per = val[3]
+            vm.mem = val[4]
+            vm.mem_per = val[5]
+            vm.vcpus = val[8]
+            vm.nets = val[9]
+            vms.append(vm)
+        return vms
+
 
 class VirtualMachine:
     """
@@ -242,21 +344,49 @@ class VirtualMachine:
     def __init__(self, name):
         self.name = name
 
-    def start(self):
+    def get_free_tcp_port(self):
+        """
+        Starts a socket connection to grab a free port (Involves a race
+            condition but will do for now)
+        :return: An open port in the system
+        """
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp.bind(('', 0))
+        _, port = tcp.getsockname()
+        tcp.close()
+        return port
+
+    def start(self, vm_options):
         """
         starts specified virtual machine
         :return: virtual machine stats with id, name, memory, vcpus, state, uptime, vnc_port
         """
-        cmd = 'xl create ' + config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf'
+        # Check if display server is to be spice if yes grab an open port and assign to spice port
+        spice_port = None
+        if vm_options:
+            spice_port = self.get_free_tcp_port()
+            vm_options = vm_options.replace('spiceport="0"', 'spiceport="{}"'.format(spice_port))
+
+        cmd = 'xl create {}/{}.conf {}'.format(
+            config.get("VMConfig", "VM_CONF_LOCATION"), self.name, vm_options)
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
-        if not p.returncode == 0:
+        if p.returncode != 0:
             logger.error(' Error while starting VM - {}'.format(cmd))
             logger.error(err.rstrip())
             raise Exception('ERROR : cannot start the vm. \n Reason : %s' % err.rstrip())
         else:
             logger.debug('VM started - {}'.format(self.name))
-            return XenAPI().list_vm(self.name)
+            vm = XenAPI().list_vm(self.name, spice_port)
+
+            # Start the Monitor Xen VM Script to watch the Xenstored Path
+            # And let it run in the background we are not worried about collecting the results
+            # cmd = '{} {}/monitor_XenVM.py {}'.format(
+            #    sys.executable, os.path.dirname(os.path.realpath(__file__)), vm.id)
+            # logger.debug('Watching VM with Xenstore {}'.format(cmd))
+            # Popen(cmd.split(), close_fds=True)
+
+            return vm
 
     def shutdown(self):
         """
@@ -321,8 +451,8 @@ class VirtualMachine:
         :param vif : vif to be assigned to the vm
         """
         try:
-            copyfile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
-                     config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow')
+            self.copyFile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
+                     config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow', perserveFileDate=False)
             logger.debug('Setup qcow file for ' + self.name)
         except Exception as e:
             logger.error(' Error while creating new VM dsk - {}'.format(self.name))
@@ -331,8 +461,8 @@ class VirtualMachine:
                             '\n Reason : %s' % str(e).rstrip())
 
         try:
-            copyfile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
-                     config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf')
+            self.copyFile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
+                     config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf', perserveFileDate=False)
         except Exception as e:
             logger.error(' Error while creating VM conf - {}'.format(self.name))
             logger.error(str(e).rstrip())
@@ -352,6 +482,45 @@ class VirtualMachine:
         f.close()
         logger.debug('Setup conf file for ' + self.name)
         logger.debug('Finished setting up '+self.name)
+
+    def copyFile(self, src, dst, buffer_size=10485760, perserveFileDate=True):
+        '''
+        Copies a file to a new location. Overriding the Apache Commons due to use of larger 
+        buffer much faster performance than before.
+        @param src:    Source File
+        @param dst:    Destination File (not file path)
+        @param buffer_size:    Buffer size to use during copy
+        @param perserveFileDate:    Preserve the original file date
+        '''
+        # Check to make sure destination directory exists. If it doesn't create the directory
+        dstParent, dstFileName = os.path.split(dst)
+        if(not(os.path.exists(dstParent))):
+            os.makedirs(dstParent)
+
+        # Optimize the buffer for small files
+        buffer_size = min(buffer_size,os.path.getsize(src))
+        if(buffer_size == 0):
+            buffer_size = 1024
+
+        if shutil._samefile(src, dst):
+            raise shutil.Error("`%s` and `%s` are the same file" % (src, dst))
+        for fn in [src, dst]:
+            try:
+                st = os.stat(fn)
+            except OSError:
+                # File most likely does not exist
+                pass
+            else:
+                # XXX What about other special files? (sockets, devices...)
+                if shutil.stat.S_ISFIFO(st.st_mode):
+                    raise shutil.SpecialFileError("`%s` is a named pipe" % fn)
+
+        with open(src, 'rb') as fsrc:
+            with open(dst, 'wb') as fdst:
+                shutil.copyfileobj(fsrc, fdst, buffer_size)
+
+        if(perserveFileDate):
+            shutil.copystat(src, dst)
 
     def cleanup(self):
         """
