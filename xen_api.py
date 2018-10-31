@@ -27,9 +27,10 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # Initialize zmq contexts
+zmqMaster = config.get("VITAL", "ZMQ_MASTER")
 ctx = zmq.Context()
 task_socket = ctx.socket(zmq.PUSH)
-task_socket.connect('tcp://Vlab-server:5000')
+task_socket.connect('tcp://' + zmqMaster  + ':5000')
 
 class XenAPI:
     """
