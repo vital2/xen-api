@@ -11,4 +11,4 @@ xl sched-credit -d Domain-0 -w 2048
 iptables -I FORWARD -m physdev --physdev-is-bridged -j ACCEPT
 
 # create bonds for course networks
-/home/vlab/source/xen-api/scripts/xen_course_network_startup.sh
+/home/vital/source/xen-api/scripts/xen_course_network_startup.sh
