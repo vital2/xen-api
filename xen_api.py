@@ -227,7 +227,7 @@ class XenAPI:
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if not p.returncode == 0:
-            if 'No such device' in err.rstrip():
+            if 'Cannot find device' in err.rstrip():
                 pass
             else:
                 logger.error('Error while stopping bridge - {}'.format(cmd))
@@ -240,7 +240,7 @@ class XenAPI:
             p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
             out, err = p.communicate()
             if not p.returncode == 0:
-                if 'No such device' in err.rstrip():
+                if "doesn't exist" in err.rstrip():
                     pass
                 else:
                     logger.error('Error while removing bridge - {}'.format(cmd))
