@@ -4,7 +4,7 @@ import shutil
 import os, errno
 import socket
 import sys
-import ConfigParser
+import configparser
 import logging
 import zmq
 import json
@@ -13,7 +13,7 @@ from logging.handlers import RotatingFileHandler
 from pyxs import Client, PyXSError
 from threading import Thread
 
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
 config.read("/home/vital/config.ini")

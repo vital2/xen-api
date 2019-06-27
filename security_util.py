@@ -1,9 +1,9 @@
 # Utility class which provides security decorators to xen_api_exposer
 import psycopg2
-import ConfigParser
+import configparser
 
 
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
 config.read("/home/vital/config.ini")
@@ -42,7 +42,7 @@ def is_exposed(func):
 def is_authorized(func, user, passwd):
     """ Checks if user is valid and if user can  perform the action specified """
 
-    print config.get("Database", "VITAL_DB_NAME")+config.get("Database", "VITAL_DB_PORT")
+    print(config.get("Database", "VITAL_DB_NAME")+config.get("Database", "VITAL_DB_PORT"))
 
     conn = psycopg2.connect(database=config.get("Database", "VITAL_DB_NAME"),
                             user=config.get("Database", "VITAL_DB_USER"),

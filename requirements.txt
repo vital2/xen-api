@@ -1,0 +1,2 @@
+pyxs
+psycopg2
