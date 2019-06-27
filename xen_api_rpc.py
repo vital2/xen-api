@@ -1,11 +1,11 @@
-from SimpleXMLRPCServer import SimpleXMLRPCServer
+from xmlrpc.server import SimpleXMLRPCServer
 from security_util import expose, requires_user_privilege, requires_authentication_only, \
     requires_admin_privilege, is_exposed, is_authorized
 from xen_api import XenAPI
-import SocketServer
-import ConfigParser
+import socketserver
+import configparser
 
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
 config.read("/home/vital/config.ini")
@@ -116,13 +116,13 @@ class XenAPIExposer:
 
 
 # allows RPC module to handle concurrent requests
-class SimpleThreadedXMLRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
+class SimpleThreadedXMLRPCServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
     pass
 
 server = SimpleThreadedXMLRPCServer((config.get("XenAPI", "IP_ADDRESS"), int(config.get("XenAPI", "PORT"))), logRequests=True, allow_none=True)
 server.register_instance(XenAPIExposer())
 try:
-    print 'Use Control-C to exit'
+    print('Use Control-C to exit')
     server.serve_forever()
 except KeyboardInterrupt:
-    print 'Exiting'
+    print('Exiting')
