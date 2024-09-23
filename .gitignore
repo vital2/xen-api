@@ -1,4 +1,39 @@
-*.pyc
-*.log
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# IDEs and Editors
 .idea/
 .vscode/
+
+# Git patches
+*.patch
+*.diff
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# Miscellaneous
+*.bak
+*.swp
+*.tmp
+*.tmp.*
+*~

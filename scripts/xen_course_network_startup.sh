@@ -19,9 +19,11 @@ function add_bridge_if {
 
 # reading from config file
 host=$(awk -F ":" '/VITAL_DB_HOST/ {print $2}' /home/vital/config.ini | tr -d ' ')
+database=$(awk -F ":" '/VITAL_DB_NAME/ {print $2}' /home/vital/config.ini | tr -d ' ')
+user=$(awk -F ":" '/VITAL_DB_USER/ {print $2}' /home/vital/config.ini | tr -d ' ')
 pass=$(awk -F ":" '/VITAL_DB_PWD/ {print $2}' /home/vital/config.ini | tr -d ' ')
 
-nets=$(PGPASSWORD=$pass psql -U postgres -d vital_db -h $host -t -c "SELECT c.id from vital_course c join vital_network_configuration n on c.id=n.course_id where c.status='ACTIVE' and n.is_course_net=True")
+nets=$(PGPASSWORD=$pass psql -U $user -d $database -h $host -t -c "SELECT c.id from vital_course c join vital_network_configuration n on c.id=n.course_id where c.status='ACTIVE' and n.is_course_net=True")
 set -f
 array=(${nets// / })
 

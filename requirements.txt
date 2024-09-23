@@ -1,0 +1,5 @@
+configparser==7.1.0
+psycopg2==2.9.9
+pyxs==0.4.1
+pyzmq==26.2.0
+setuptools==57.4.0
