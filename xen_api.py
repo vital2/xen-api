@@ -1,19 +1,19 @@
 from subprocess import Popen, PIPE
 from glob import glob
 import shutil
-import os, errno
+import os
+import errno
 import socket
-import sys
-import ConfigParser
+# import sys
+import configparser
 import logging
 import zmq
-import json
 
 from logging.handlers import RotatingFileHandler
-from pyxs import Client, PyXSError
+from pyxs import Client
 from threading import Thread
 
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 
 # TODO change this to a common config file on a shared location
 config.read("/home/vital/config.ini")
@@ -30,7 +30,8 @@ logger.addHandler(handler)
 zmqMaster = config.get("VITAL", "ZMQ_MASTER")
 ctx = zmq.Context()
 task_socket = ctx.socket(zmq.PUSH)
-task_socket.connect('tcp://' + zmqMaster  + ':5000')
+task_socket.connect('tcp://' + zmqMaster + ':5000')
+
 
 class XenAPI:
     """
@@ -131,20 +132,20 @@ class XenAPI:
         vm.uptime = val[5]
         vm.vnc_port = None
 
-        if not display_port is None:
+        if display_port is not None:
             # The display server being used is SPICE
             vm.vnc_port = display_port
         else:
             # even though value of vnc port is set in the config file, if the port is already in use
             # by the vnc server, it allocates a new vnc port without throwing an error.
             # this additional step makes sure that we get the updated vnc-port
-            #cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
-            #p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
-            #out, err = p.communicate()
-            #if not p.returncode == 0:
+            # cmd = 'xenstore-read /local/domain/' + vm.id + '/console/vnc-port'
+            # p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+            # out, err = p.communicate()
+            # if not p.returncode == 0:
             #    raise Exception('ERROR : cannot start the vm - error while getting vnc-port. '
             #                    '\n Reason : %s' % err.rstrip())
-            #vm.vnc_port = out.rstrip()
+            # vm.vnc_port = out.rstrip()
             with Client() as c:
                 vm.vnc_port = c[b'/local/domain/{}/console/vnc-port'.format(vm.id)]
 
@@ -261,7 +262,7 @@ class XenAPI:
         else:
             return False
 
-    def is_bridge_up(self,name):
+    def is_bridge_up(self, name):
         logger.debug('Checking if bridge {} is up'.format(name))
         cmd = 'ip a show ' + name + ' up'
         p = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
@@ -297,12 +298,15 @@ class XenAPI:
                         logger.debug('Event on path {}'.format(path))
 
                         # Send update via ZMQ Socket
-                        task_kwargs = {'user_id': user_id, 'course_id': course_id, 'vm_id': vm_id,}
-                        task_socket.send_json({'task': 'release_vm', 'task_kwargs': task_kwargs,})
-                        # requests.get('https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id + '/vms/' + vm_id + '/release-vm/', params=params)
+                        task_kwargs = {'user_id': user_id, 'course_id': course_id, 'vm_id': vm_id}
+                        task_socket.send_json({'task': 'release_vm', 'task_kwargs': task_kwargs})
+                        # requests.get(
+                        #   'https://' + config.get("VITAL", "SERVER_NAME") + '/vital/users/' + user_id +
+                        #   '/vms/' + vm_id + '/release-vm/', params=params
+                        # )
 
         except Exception as e:
-	    logger.error(str(e))
+            logger.error(str(e))
 
     def get_dom_details(self):
         """
@@ -452,8 +456,10 @@ class VirtualMachine:
         :param vif : vif to be assigned to the vm
         """
         try:
-            self.copyFile(config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
-                     config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow', perserveFileDate=False)
+            self.copyFile(
+                config.get("VMConfig", "VM_DSK_LOCATION") + '/clean/' + base_vm + '.qcow',
+                config.get("VMConfig", "VM_DSK_LOCATION") + '/' + self.name + '.qcow', perserveFileDate=False
+            )
             logger.debug('Setup qcow file for ' + self.name)
         except Exception as e:
             logger.error(' Error while creating new VM dsk - {}'.format(self.name))
@@ -462,8 +468,10 @@ class VirtualMachine:
                             '\n Reason : %s' % str(e).rstrip())
 
         try:
-            self.copyFile(config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
-                     config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf', perserveFileDate=False)
+            self.copyFile(
+                config.get("VMConfig", "VM_CONF_LOCATION") + '/clean/' + base_vm + '.conf',
+                config.get("VMConfig", "VM_CONF_LOCATION") + '/' + self.name + '.conf', perserveFileDate=False
+            )
         except Exception as e:
             logger.error(' Error while creating VM conf - {}'.format(self.name))
             logger.error(str(e).rstrip())
@@ -486,7 +494,7 @@ class VirtualMachine:
 
     def copyFile(self, src, dst, buffer_size=10485760, perserveFileDate=True):
         '''
-        Copies a file to a new location. Overriding the Apache Commons due to use of larger 
+        Copies a file to a new location. Overriding the Apache Commons due to use of larger
         buffer much faster performance than before.
         @param src:    Source File
         @param dst:    Destination File (not file path)
@@ -495,12 +503,12 @@ class VirtualMachine:
         '''
         # Check to make sure destination directory exists. If it doesn't create the directory
         dstParent, dstFileName = os.path.split(dst)
-        if(not(os.path.exists(dstParent))):
+        if not os.path.exists(dstParent):
             os.makedirs(dstParent)
 
         # Optimize the buffer for small files
-        buffer_size = min(buffer_size,os.path.getsize(src))
-        if(buffer_size == 0):
+        buffer_size = min(buffer_size, os.path.getsize(src))
+        if buffer_size == 0:
             buffer_size = 1024
 
         if shutil._samefile(src, dst):
@@ -520,7 +528,7 @@ class VirtualMachine:
             with open(dst, 'wb') as fdst:
                 shutil.copyfileobj(fsrc, fdst, buffer_size)
 
-        if(perserveFileDate):
+        if perserveFileDate:
             shutil.copystat(src, dst)
 
     def cleanup(self):
